@@ -6,7 +6,7 @@ namespace CSharpEnigma
     /// <summary>
     /// Representation for the enciphering rotor from the Enigma Machine
     /// </summary>
-    class Rotor
+    public class Rotor
     {
         /// <summary>
         /// Number of positions on a Rotor.
@@ -14,22 +14,80 @@ namespace CSharpEnigma
         public const int RingSize = 26;
 
         /// <summary>
-        /// The available Rotors in this implementation including an error value.
+        /// The available rotors for the library.
         /// </summary>
-        public enum Rotors { I, II, III, IV, VI, VII, VIII, BETA, GAMMA,
+        public enum Rotors {
+            /// <summary>
+            /// The M3 Rotor I
+            /// </summary>
+            I,
+            /// <summary>
+            /// The M3 Rotor II
+            /// </summary>
+            II,
+            /// <summary>
+            /// The M3 Rotor III
+            /// </summary>
+            III,
+            /// <summary>
+            /// The M3 Rotor IV
+            /// </summary>
+            IV,
+            /// <summary>
+            /// The M3 Rotor V
+            /// </summary>
+            V,
+            /// <summary>
+            /// The M3 and M4 Rotor VI
+            /// </summary>
+            VI,
+            /// <summary>
+            /// The M3 and M4 Rotor VII
+            /// </summary>
+            VII,
+            /// <summary>
+            /// The M3 and M4 Rotor VII
+            /// </summary>
+            VIII,
+            /// <summary>
+            /// The M4 Thin Rotor Beta
+            /// </summary>
+            BETA,
+            /// <summary>
+            /// The M4 Thin Rotor Gamma
+            /// </summary>
+            GAMMA,
+            /// <summary>
+            /// A bad rotor.
+            /// </summary>
             BAD_ROTOR };
 
         /// <summary>
         /// The mappings between the right and left side of the rotors assuming no offseting
         /// between position A on the indicator ring and position A on the wiring.
         /// </summary>
-        private readonly string[] RotorStrings = { "EKMFLGDQVZNTOWYHXUSPAIBRCJ",
+        private readonly static string[] RotorStrings = { "EKMFLGDQVZNTOWYHXUSPAIBRCJ",
             "AJDKSIRUXBLHWTMCQGZNPYFVOE", "BDFHJLCPRTXVZNYEIWGAKMUSQO",
             "ESOVPZJAYQUIRHXLNFTGKDCMWB", "VZBRGITYUPSDNHLXAWMJQOFECK",
             "JPGVOUMFYQBENHZRDKASXLICTW", "NZJHGRCXMYSWBOUFAIVLPEKQDT",
             "FKQHTLXOCBJSPDZRAMEWNIUYGV", "LEYJVCNIXWPBQMDRTAKZGFUHOS",
             "FSOKANUERHMBTIYCWLQPZXVGJD" };
-        
+        /// <summary>
+        /// Lookup Table for the stepping transfer points for the rotors.
+        /// </summary>
+        private readonly static Characters[,] RotorTurnoverList = new Characters[,]{{Characters.Q, Characters.BAD_CHARACTER },// Rotor I
+        {Characters.E, Characters.BAD_CHARACTER },// Rotor II
+        {Characters.V, Characters.BAD_CHARACTER },// Rotor III
+        {Characters.J, Characters.BAD_CHARACTER },// Rotor IV
+        {Characters.Z, Characters.BAD_CHARACTER },// Rotor V
+        {Characters.Z, Characters.M }, // Rotor VI
+        {Characters.Z, Characters.M }, // Rotor VII
+        {Characters.Z, Characters.M }, // Rotor VIII
+        {Characters.BAD_CHARACTER, Characters.BAD_CHARACTER }, // Rotor Beta
+        {Characters.BAD_CHARACTER, Characters.BAD_CHARACTER }, }; // Rotor Gamma
+
+        private Characters[] indicatorTransferPositon = null;
+
         /// <summary>
         /// The internal lookup table used to encipher when going right to left.
         /// </summary>
@@ -39,34 +97,16 @@ namespace CSharpEnigma
         /// The internal lookup table used to encipher when going left to right.
         /// </summary>
         private Dictionary<Characters, Characters> leftToRightMapping;
-        
-        /// <summary>
-        /// Where position A on the wiring maps to on the indicator ring.
-        /// Defaults to A.
-        /// </summary>
-        private Characters currentOffset = Characters.A;
 
         /// <summary>
-        /// Property for easy read access of the offset between the indicator ring and the rotor wiring.
+        /// The offset between the indicator ring and the rotor wiring.
         /// </summary>
-        public Characters Offset
-        {
-            get { return currentOffset; }
-        }
-
+        public Characters Offset { get; }
 
         /// <summary>
         /// Which position on the indicator ring is currently visible.
         /// </summary>
-        private Characters currentIndicator;
-
-        /// <summary>
-        /// Which position on the indicator ring is currently visible.
-        /// </summary>
-        public Characters Indicator
-        {
-            get { return currentIndicator; }
-        }
+        public Characters Indicator { get; set; } = Characters.A;
 
         /// <summary>
         /// Quick constructor for a Rotor. Useful when you aren't changing the offset of the wiring.
@@ -117,13 +157,62 @@ namespace CSharpEnigma
             }
             if(Enum.IsDefined(typeof(Characters), ringOffset) && ringOffset != Characters.BAD_CHARACTER)
             {
-                currentOffset = ringOffset;
+                this.Offset = ringOffset;
             } else
             {
                 throw new InvalidCharacterException("Sorry, the ring offset must be between Characters.A and Characters.Z.");
             }
         }
 
+        /// <summary>
+        /// Steps a rotor.
+        /// </summary>
+        /// <returns>True or False if the rotor will also step the next rotor.</returns>
+        virtual public bool step()
+        {
+            bool returnValue = (Indicator == indicatorTransferPositon[0]) || (Indicator == indicatorTransferPositon[1]);
+            Indicator = CharactersAssistant.nextCharacter(Indicator);
+            return returnValue;
+        }
 
+        /// <summary>
+        /// Enciphers the plaintext. This is used before the reflector.
+        /// Currently not implemented.
+        /// </summary>
+        /// <param name="plaintext">The character to be enciphered.</param>
+        /// <returns>The Ciphertext.</returns>
+        public Characters encipherRightToLeft(Characters plaintext)
+        {
+            return encipher(plaintext, rightToLeftMapping);
+        }
+
+        /// <summary>
+        /// Enciphers the plaintext. This is used after the reflector.
+        /// Currently not implemented.
+        /// </summary>
+        /// <param name="plaintext">The character to be enciphered.</param>
+        /// <returns>The Ciphertext.</returns>
+        public Characters encipherLeftToRight(Characters plaintext)
+        {
+            return encipher(plaintext, leftToRightMapping);
+        }
+
+        /// <summary>
+        /// Handles the internal implementation of the encipherment. Implementation is not currently complete.
+        /// </summary>
+        /// <remarks>
+        /// The manipulation of the plaintext is required to correctly compensate for the change in relative position between the A index on the input and its current
+        /// position in our representation of the rotor's wiring table. If I were to change implementations and shift the entire contents of the rotor mapings, then
+        /// those manipulations would not be needed.
+        /// 
+        /// Implementation is not currently complete.
+        /// </remarks>
+        /// <param name="plaintext">The plaintext.</param>
+        /// <param name="direction">The Wiring Map for the direction of encipherment.</param>
+        /// <returns>The Ciphertext.</returns>
+        private Characters encipher(Characters plaintext, Dictionary<Characters,Characters> direction)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

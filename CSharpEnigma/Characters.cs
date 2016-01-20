@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 
 namespace CSharpEnigma
 {
-    enum Characters {A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, BAD_CHARACTER};
+    public enum Characters {A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, BAD_CHARACTER};
 
-    static class CharactersAssistant
+    public static class CharactersAssistant
     {
-        static Characters nextCharacter(Characters input)
+        public static Characters nextCharacter(Characters input)
         {
             int plusOne = ((int)input + 1) % Rotor.RingSize;
             if (Enum.IsDefined(typeof(Characters), (Characters)plusOne))
@@ -22,7 +22,7 @@ namespace CSharpEnigma
             }
         }
 
-        static Characters previousCharacter(Characters input)
+        public static Characters previousCharacter(Characters input)
         {
             int minusOne = ((int)input - 1 + Rotor.RingSize) % Rotor.RingSize;
             if (Enum.IsDefined(typeof(Characters), (Characters)minusOne))
@@ -34,7 +34,7 @@ namespace CSharpEnigma
             }
         }
 
-        static Characters forwardBy(Characters first, Characters second)
+        public static Characters forwardBy(Characters first, Characters second)
         {
             int newCharacter = ((int)first + (int)second) % Rotor.RingSize;
             if (Enum.IsDefined(typeof(Characters), (Characters)newCharacter))
@@ -46,7 +46,7 @@ namespace CSharpEnigma
             }
         }
 
-        static Characters backwardsBy(Characters first, Characters second)
+        pulbic static Characters backwardsBy(Characters first, Characters second)
         {
             int newCharacter = ((int)first + (int)second + Rotor.RingSize) % Rotor.RingSize;
             if( Enum.IsDefined(typeof(Characters), (Characters)newCharacter))
