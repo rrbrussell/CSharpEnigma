@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CSharpEnigma
 {
@@ -75,48 +76,81 @@ namespace CSharpEnigma
         /// <summary>
         /// Lookup Table for the stepping transfer points for the rotors.
         /// </summary>
-        private readonly static Alphabet[,] RotorTurnoverList = new Alphabet[,]{{Alphabet.Q, Alphabet.BadCharacter },// Rotor I
-        {Alphabet.E, Alphabet.BadCharacter },// Rotor II
-        {Alphabet.V, Alphabet.BadCharacter },// Rotor III
-        {Alphabet.J, Alphabet.BadCharacter },// Rotor IV
-        {Alphabet.Z, Alphabet.BadCharacter },// Rotor V
-        {Alphabet.Z, Alphabet.M }, // Rotor VI
-        {Alphabet.Z, Alphabet.M }, // Rotor VII
-        {Alphabet.Z, Alphabet.M }, // Rotor VIII
-        {Alphabet.BadCharacter, Alphabet.BadCharacter }, // Rotor Beta
-        {Alphabet.BadCharacter, Alphabet.BadCharacter }, }; // Rotor Gamma
+        private readonly static int[,] RotorTurnoverList = new int[,]{{(int)EnigmaAlphabet.Q, (int)EnigmaAlphabet.BadCharacter },// Rotor I
+        {(int)EnigmaAlphabet.E, (int)EnigmaAlphabet.BadCharacter },// Rotor II
+        {(int)EnigmaAlphabet.V, (int)EnigmaAlphabet.BadCharacter },// Rotor III
+        {(int)EnigmaAlphabet.J, (int)EnigmaAlphabet.BadCharacter },// Rotor IV
+        {(int)EnigmaAlphabet.Z, (int)EnigmaAlphabet.BadCharacter },// Rotor V
+        {(int)EnigmaAlphabet.Z, (int)EnigmaAlphabet.M }, // Rotor VI
+        {(int)EnigmaAlphabet.Z, (int)EnigmaAlphabet.M }, // Rotor VII
+        {(int)EnigmaAlphabet.Z, (int)EnigmaAlphabet.M }, // Rotor VIII
+        {(int)EnigmaAlphabet.BadCharacter, (int)EnigmaAlphabet.BadCharacter }, // Rotor Beta
+        {(int)EnigmaAlphabet.BadCharacter, (int)EnigmaAlphabet.BadCharacter }, }; // Rotor Gamma
 
-        private Alphabet[] indicatorTransferPositon = null;
+        private int[] indicatorTransferPositon = null;
 
         /// <summary>
         /// The internal lookup table used to Encipher when going right to left.
         /// </summary>
-        private Dictionary<Alphabet, Alphabet> rightToLeftMapping;
-        
+        private LinkedList<int> RightToLeftMapping;
+
         /// <summary>
         /// The internal lookup table used to Encipher when going left to right.
         /// </summary>
-        private Dictionary<Alphabet, Alphabet> leftToRightMapping;
+        private LinkedList<int> LeftToRightMapping;
 
         /// <summary>
         /// The offset between the indicator ring and the rotor wiring.
         /// </summary>
-        public Alphabet Offset { get; }
+        public int Offset { get; }
 
         /// <summary>
-        /// Which position on the indicator ring is currently visible.
+        /// Which position on the indicator ring is currently visible.<br/>
+        /// All math is done % Rotor.RingSize and negative values are ingnored.
         /// </summary>
-        public Alphabet Indicator { get; set; } = Alphabet.A;
+        public int Indicator
+        {
+            get
+            {
+                return _Indicator;
+            }
+
+            set
+            {
+                if (value >= 0)
+                {
+                    var tvalue = value;
+                    if (tvalue >= Rotor.RingSize)
+                    {
+                        tvalue = tvalue % Rotor.RingSize;
+                    }
+                    if (tvalue < _Indicator)
+                    {
+                        Shift((value + Rotor.RingSize) - _Indicator);
+                    }
+                    else
+                    {
+                        Shift(value - _Indicator);
+                    }
+                    _Indicator = tvalue;
+                } else
+                {
+                    // do nothing
+                }
+            }
+        }
+
+        private int _Indicator = 0;
 
         /// <summary>
         /// Quick constructor for a Rotor. Useful when you aren't changing the offset of the wiring.
         /// </summary>
         /// <param name="chosenRotor">Which Rotor from the Rotors enumeration you want.</param>
-        /// <seealso cref="Rotor(Rotors, Alphabet)">
+        /// <seealso cref="Rotor(Rotors, int)">
         /// This constructor has the same constraints and exceptions as the full constructor for Rotor.
         /// </seealso>
         public Rotor(Rotors chosenRotor)
-            : this(chosenRotor, Alphabet.A)
+            : this(chosenRotor, 0)
         {
         }
 
@@ -127,44 +161,70 @@ namespace CSharpEnigma
         /// <param name="ringOffset">Position A on the wiring map matches this position on the indicator ring.</param>
         /// <exception cref="InvalidRotorChoiceException"/>
         /// <exception cref="InvalidLetterException"/>
-        public Rotor(Rotors chosenRotor, Alphabet ringOffset)
+        public Rotor(Rotors chosenRotor, int ringOffset)
         {
-            if (Enum.IsDefined(typeof(Rotors), chosenRotor) && chosenRotor != Rotors.BadRotor)
-            {
-                // Create the Dictionaries
-                rightToLeftMapping = new Dictionary<Alphabet, Alphabet>(RingSize);
-                leftToRightMapping = new Dictionary<Alphabet, Alphabet>(RingSize);
+            RightToLeftMapping = new LinkedList<int>();
+            LeftToRightMapping = new LinkedList<int>();
 
-                // The Right to Left direction is represented directly by the string
-                // from RotorString. So I can just directly map it.
-                // This is a lot cleaner in the Java version due to Java's much superior
-                // handling of Enumerations.
-                for (int index = 0; index < RotorStrings[(int)chosenRotor].Length; index++)
-                {
-                    rightToLeftMapping.Add((Alphabet)index,
-                        (Alphabet)Enum.Parse(typeof(Alphabet), RotorStrings[(int)chosenRotor].Substring(index, 1)));
-                }
-
-                // The Left to Right direction is built by inverting the Key to Value relationship
-                // in the Right to Left dictionary.
-                foreach (KeyValuePair<Alphabet, Alphabet> kvp in rightToLeftMapping)
-                {
-                    leftToRightMapping.Add(kvp.Value, kvp.Key);
-                }
-
-                indicatorTransferPositon = new Alphabet[2];
-                indicatorTransferPositon[0] = RotorTurnoverList[(int)chosenRotor, 0];
-                indicatorTransferPositon[1] = RotorTurnoverList[(int)chosenRotor, 1];
-            } else
+            // Bail early and hard if conditions aren't perfect.
+            if (!Enum.IsDefined(typeof(Rotors), chosenRotor) || chosenRotor == Rotors.BadRotor)
             {
                 throw new InvalidRotorChoiceException("Sorry, The chosen rotor must be Rotors.I and Rotors.Gamma.");
             }
-            if(Enum.IsDefined(typeof(Alphabet), ringOffset) && ringOffset != Alphabet.BadCharacter)
+            if (ringOffset < 0 || ringOffset > 25)
             {
-                this.Offset = ringOffset;
-            } else
+                throw new InvalidLetterException("Sorry, the ring offset must be between 0 and 25.");
+            }
+
+            // Create the Dictionaries
+            SortedDictionary<EnigmaAlphabet, EnigmaAlphabet> rightToLeftMappingDictionary = new SortedDictionary<EnigmaAlphabet, EnigmaAlphabet>();
+            SortedDictionary<EnigmaAlphabet, EnigmaAlphabet> leftToRightMappingDictionary = new SortedDictionary<EnigmaAlphabet, EnigmaAlphabet>();
+
+            // The Right to Left direction is represented directly by the string
+            // from RotorStrings. So I can just directly map it.
+            // This is a lot cleaner in the Java version due to Java's much superior
+            // handling of Enumerations.
+            for (int index = 0; index < RotorStrings[(int)chosenRotor].Length; index++)
             {
-                throw new InvalidLetterException("Sorry, the ring offset must be between Alphabet.A and Alphabet.Z.");
+                rightToLeftMappingDictionary.Add((EnigmaAlphabet)index,
+                    (EnigmaAlphabet)Enum.Parse(typeof(EnigmaAlphabet), RotorStrings[(int)chosenRotor].Substring(index, 1)));
+            }
+
+            // The Left to Right direction is built by inverting the Key to Value relationship
+            // in the Right to Left dictionary.
+            foreach (KeyValuePair<EnigmaAlphabet, EnigmaAlphabet> kvp in rightToLeftMappingDictionary)
+            {
+                leftToRightMappingDictionary.Add(kvp.Value, kvp.Key);
+            }
+
+            // now that I have created a sorted key to value mapping convert those mappings into lists.
+            RightToLeftMapping = new LinkedList<int>(rightToLeftMappingDictionary.Values.Cast<int>());
+            LeftToRightMapping = new LinkedList<int>(leftToRightMappingDictionary.Values.Cast<int>());
+
+            indicatorTransferPositon = new int[2];
+            indicatorTransferPositon[0] = RotorTurnoverList[(int)chosenRotor, 0];
+            indicatorTransferPositon[1] = RotorTurnoverList[(int)chosenRotor, 1];
+
+            Offset = ringOffset;
+            // Shift the rotor's wiring forward until the correct offset between the indicator and the rotor's wiring is achieved
+            if (ringOffset != 0 )
+            {
+                Shift(ringOffset);
+            }
+            _Indicator = 0;
+        }
+
+        private void Shift(int howManyTimes)
+        {
+            if(howManyTimes > 0)
+            {
+                for (int i = howManyTimes; i > 0; i--)
+                {
+                    var temp = RightToLeftMapping.First;
+                    RightToLeftMapping.AddLast(temp);
+                    temp = LeftToRightMapping.First;
+                    LeftToRightMapping.AddLast(temp);
+                }
             }
         }
 
@@ -175,20 +235,19 @@ namespace CSharpEnigma
         public bool Step()
         {
             bool returnValue = (Indicator == indicatorTransferPositon[0]) || (Indicator == indicatorTransferPositon[1]);
-            Indicator = CharactersAssistant.NextCharacter(Indicator);
+            Indicator += 1;
             return returnValue;
         }
 
         /// <summary>
         /// Enciphers the plaintext. This is used before the reflector.
-        /// Currently not implemented.
         /// </summary>
         /// <param name="plaintext">The character to be enciphered.</param>
         /// <returns>The Ciphertext.</returns>
-        /// <see cref="Encipher(Alphabet, Dictionary{Alphabet, Alphabet})"/>
-        public Alphabet EncipherRightToLeft(Alphabet plaintext)
+        /// <see cref="Encipher(int, LinkedList{int})"/>
+        public int EncipherRightToLeft(int plaintext)
         {
-            return Encipher(plaintext, rightToLeftMapping);
+            return Encipher(plaintext, RightToLeftMapping);
         }
 
         /// <summary>
@@ -197,27 +256,26 @@ namespace CSharpEnigma
         /// </summary>
         /// <param name="plaintext">The character to be enciphered.</param>
         /// <returns>The Ciphertext.</returns>
-        /// <see cref="Encipher(Alphabet, Dictionary{Alphabet, Alphabet})"/>
-        public Alphabet EncipherLeftToRight(Alphabet plaintext)
+        /// <see cref="Encipher(int, LinkedList{int})"/>
+        public int EncipherLeftToRight(int plaintext)
         {
-            return Encipher(plaintext, leftToRightMapping);
+            return Encipher(plaintext, LeftToRightMapping);
         }
 
         /// <summary>
-        /// Handles the internal implementation of the encipherment. Implementation is not currently complete.
+        /// Handles the internal implementation of the encipherment.
         /// </summary>
         /// <remarks>
         /// The manipulation of the plaintext is required to correctly compensate for the change in relative position between the A index on the input and its current
         /// position in our representation of the rotor's wiring table. If I were to change implementations and shift the entire contents of the rotor mapings, then
         /// those manipulations would not be needed.
-        /// 
-        /// Implementation is not currently complete.
         /// </remarks>
         /// <param name="plaintext">The plaintext.</param>
         /// <param name="direction">The Wiring Map for the direction of encipherment.</param>
         /// <returns>The Ciphertext.</returns>
-        private Alphabet Encipher(Alphabet plaintext, Dictionary<Alphabet,Alphabet> direction)
+        private int Encipher(int plaintext, LinkedList<int> direction)
         {
+            return direction.ElementAt(plaintext);
             throw new NotImplementedException();
         }
     }

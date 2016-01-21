@@ -3,6 +3,7 @@ using System;
 
 namespace CSharpEnigma.Tests
 {
+    /*
     [TestClass()]
     public class CharactersAssistantTests
     {
@@ -35,5 +36,5 @@ namespace CSharpEnigma.Tests
             Alphabet actualPrevious = CharactersAssistant.PreviousCharacter(current);
             Assert.AreEqual(expectedPrevious, actualPrevious);
         }
-    }
+    }*/
 }
